@@ -1,8 +1,8 @@
 # STEP 1: build executable static binary
 FROM golang:latest as builder
 
-# Create appuser
-RUN useradd rester
+# Create rester user to run
+RUN RUN groupadd --gid 10000 rester && useradd --no-log-init --gid rester --uid 10000 rester
 
 WORKDIR /go/src/github.com/Cajga/rester/
 
@@ -21,9 +21,9 @@ FROM scratch
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 
 # get passwd for rest-tester user
-COPY --from=builder /etc/passwd /etc/passwd
+COPY --from=builder /etc/passwd /etc/group /etc/
 # get binary
 COPY --from=builder /go/src/github.com/Cajga/rester/rester /go/bin/rester
-USER rester
+USER rester:rester
 EXPOSE 8000
 CMD ["/go/bin/rester"]
