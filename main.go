@@ -9,11 +9,14 @@ import (
     "strings"
     "os"
     "net"
+    "regexp"
     "strconv"
     "time"
+    "sort"
 )
 
 const default_listen_address = ":8000"
+const version = "0.1.2"
 
 func GetOutboundIP() net.IP {
     conn, err := net.Dial("udp", "1.1.1.1:80")
@@ -53,10 +56,20 @@ func GetResponse(w http.ResponseWriter, r *http.Request) {
     fmt.Fprintf(w, "  proto: %q\n", r.Proto)
     fmt.Fprintf(w, "  URL path: %q\n", html.EscapeString(r.URL.Path))
     fmt.Fprintf(w, "  remote Addr: %q\n", r.RemoteAddr)
+    fmt.Fprintf(w, "  UTC time of the request: %q\n", time.Now().UTC().Format(time.RFC3339Nano))
     fmt.Fprint(w, "  headers:\n")
-    fmt.Fprintf(w, "    \"Host\": %q\n", html.EscapeString(r.Host))
-    for k, v := range r.Header {
-        fmt.Fprintf(w,"    %q: [%q]\n", html.EscapeString(k), html.EscapeString(strings.Join(v,", ")))
+    headers := make([]string, 0, len(r.Header))
+    for header := range r.Header {
+        headers = append(headers,header)
+    }
+    headers = append(headers,"Host")
+    sort.Strings(headers)
+    for _, header := range headers {
+        if header == "Host" {
+            fmt.Fprintf(w, "    \"Host\": %q\n", html.EscapeString(r.Host))
+        } else {
+            fmt.Fprintf(w,"    %q: [%q]\n", html.EscapeString(header), html.EscapeString(strings.Join(r.Header[header],", ")))
+        }
     }
 
     fmt.Fprint(w, "\nEnvironment info:\n")
@@ -71,9 +84,13 @@ func GetResponse(w http.ResponseWriter, r *http.Request) {
 
 func main() {
     router := mux.NewRouter()
-    router.HandleFunc("/", GetResponse)
+    router.MatcherFunc(func(r *http.Request, rm *mux.RouteMatch) bool {
+        match, _ := regexp.MatchString("/.*", r.URL.Path)
+        // TODO handle error from regex
+        return match
+    }).HandlerFunc(GetResponse)
     addr := GetListenAddress(default_listen_address)
-    log.Println("Listening on " + addr)
+    log.Println("Listening on " + addr + " with version " + version)
 
     srv := &http.Server{
         Handler:      router,
